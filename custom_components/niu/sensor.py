@@ -22,7 +22,6 @@ MOTOR_INDEX_API_URI = "/v5/scooter/motor_data/index_info"
 MOTOINFO_LIST_API_URI = "/v5/scooter/list"
 MOTOINFO_ALL_API_URI = "/motoinfo/overallTally"
 TRACK_LIST_API_URI = "/v5/track/list/v2"
-# FIRMWARE_BAS_URL = '/motorota/getfirmwareversion'
 
 DOMAIN = "niu"
 CONF_USERNAME = "username"
@@ -36,10 +35,7 @@ SENSOR_TYPE_MOTO = "MOTO"
 SENSOR_TYPE_DIST = "DIST"
 SENSOR_TYPE_OVERALL = "TOTAL"
 SENSOR_TYPE_POS = "POSITION"
-# SENSOR_TYPE_SYSTEM = 'SYSTEM'
 SENSOR_TYPE_TRACK = "TRACK"
-
-# MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=60)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -268,10 +264,7 @@ SENSOR_TYPES = {
         "none",
         "mdi:map",
     ]
-    #   'Config' : [sensor_id, uom, id_name, sensor_grp, device_class, icon]
 }
-# NiuSensor(data_bridge, sensor, sensor_config[0], sensor_config[1], sensor_config[2],sensor_config[3], sensor_prefix, sensor_config[4], sn, sensor_config[5] ))
-# NiuSensor(data_bridge, name,  sensor_id, uom, id_name,sensor_grp, sensor_prefix, device_class, sn, icon)
 
 
 def get_token(username, password):
@@ -294,7 +287,6 @@ def get_token(username, password):
 
 
 def get_vehicles_info(path, token):
-
     url = API_BASE_URL + path
     headers = {"token": token}
     try:
@@ -309,16 +301,13 @@ def get_vehicles_info(path, token):
 
 def get_info(path, sn, token):
     url = API_BASE_URL + path
-
     params = {"sn": sn}
     headers = {
         "token": token,
         "user-agent": "manager/4.6.48 (android; IN2020 11);lang=zh-CN;clientIdentifier=Domestic;timezone=Asia/Shanghai;model=IN2020;deviceName=IN2020;ostype=android",
     }
     try:
-
         r = requests.get(url, headers=headers, params=params)
-
     except ConnectionError:
         return False
     if r.status_code != 200:
@@ -332,17 +321,36 @@ def get_info(path, sn, token):
 def post_info(path, sn, token):
     url = API_BASE_URL + path
     params = {}
-    headers = {"token": token, "Accept-Language": "en-US"}
+    headers = {"token": token, "Accept-Language": "en-US", "Content-Type": "application/json"}
+    
     try:
-        r = requests.post(url, headers=headers, params=params, data={"sn": sn})
-    except ConnectionError:
+        r = requests.post(url, headers=headers, params=params, json={"sn": sn})
+    except ConnectionError as e:
+        _LOGGER.error(f"post_info: ConnectionError occurred: {e}")
         return False
+    except Exception as e:
+        _LOGGER.error(f"post_info: Unexpected error occurred: {e}")
+        return False
+        
     if r.status_code != 200:
+        _LOGGER.error(f"post_info: HTTP status code {r.status_code} is not 200")
         return False
-    data = json.loads(r.content.decode())
-    if data["status"] != 0:
+        
+    try:
+        data = json.loads(r.content.decode())
+        if data["status"] != 0:
+            _LOGGER.error(f"post_info: API status {data['status']} is not 0. Response: {data}")
+            return False
+        return data
+    except json.JSONDecodeError as e:
+        _LOGGER.error(f"post_info: JSON decode error: {e}")
         return False
-    return data
+    except KeyError as e:
+        _LOGGER.error(f"post_info: Missing key in response: {e}")
+        return False
+    except Exception as e:
+        _LOGGER.error(f"post_info: Unexpected error parsing response: {e}")
+        return False
 
 
 def post_info_track(path, sn, token):
@@ -371,53 +379,161 @@ def post_info_track(path, sn, token):
 
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
-
-    # get config variables
     username = config.get(CONF_USERNAME)
     password = config.get(CONF_PASSWORD)
     scooter_id = config.get(CONF_SCOOTER_ID)
     api_uri = MOTOINFO_LIST_API_URI
 
-    # get token and unique scooter sn
-    token = get_token(username, password)
-    sn = get_vehicles_info(api_uri, token)["data"]["items"][scooter_id]["sn_id"]
-    sensor_prefix = get_vehicles_info(api_uri, token)["data"]["items"][scooter_id][
-        "scooter_name"
-    ]
+    token, sn, sensor_prefix = _get_vehicle_info_with_retry(username, password, api_uri, scooter_id)
+    if not all([token, sn, sensor_prefix]):
+        _LOGGER.error("Failed to get vehicle information after all retries")
+        return
 
     sensors = config.get(CONF_MONITORED_VARIABLES)
+    data_bridge = _initialize_data_bridge_with_retry(sn, token)
+    if not data_bridge:
+        _LOGGER.error("Failed to initialize data bridge after all retries")
+        return
 
-    # init data class
-    data_bridge = NiuDataBridge(sn, token)
-    data_bridge.updateBat()
-    data_bridge.updateMoto()
-    data_bridge.updateMotoInfo()
-    data_bridge.updateTrackInfo()
+    devices = _create_sensors_with_retry(data_bridge, sensors, sensor_prefix, sn)
+    
+    if devices:
+        add_devices(devices)
+        _LOGGER.info(f"Successfully added {len(devices)} NIU sensors")
+    else:
+        _LOGGER.error("No sensors were created successfully")
 
-    # add sensors
+
+def _get_vehicle_info_with_retry(username, password, api_uri, scooter_id, max_retries=3, retry_delay=2):
+    """Get vehicle information with retry mechanism"""
+    for attempt in range(max_retries):
+        try:
+            _LOGGER.info(f"Attempt {attempt + 1}: Getting vehicle information...")
+            
+            token = get_token(username, password)
+            if not token:
+                _LOGGER.warning(f"Attempt {attempt + 1}: Failed to get authentication token")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(retry_delay)
+                    continue
+                return None, None, None
+            
+            vehicles_info = get_vehicles_info(api_uri, token)
+            if not vehicles_info or "data" not in vehicles_info or "items" not in vehicles_info["data"]:
+                _LOGGER.warning(f"Attempt {attempt + 1}: Failed to get vehicles information")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(retry_delay)
+                    continue
+                return None, None, None
+            
+            if scooter_id >= len(vehicles_info["data"]["items"]):
+                _LOGGER.error(f"Scooter ID {scooter_id} is out of range. Available scooters: {len(vehicles_info['data']['items'])}")
+                return None, None, None
+            
+            sn = vehicles_info["data"]["items"][scooter_id]["sn_id"]
+            sensor_prefix = vehicles_info["data"]["items"][scooter_id]["scooter_name"]
+            
+            _LOGGER.info(f"Successfully connected to NIU scooter: {sensor_prefix} (SN: {sn})")
+            return token, sn, sensor_prefix
+            
+        except Exception as e:
+            _LOGGER.warning(f"Attempt {attempt + 1}: Error getting vehicle information: {e}")
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(retry_delay)
+            else:
+                _LOGGER.error(f"Final attempt failed: {e}")
+                return None, None, None
+    
+    return None, None, None
+
+
+def _initialize_data_bridge_with_retry(sn, token, max_retries=3, retry_delay=2):
+    """Initialize data bridge with retry mechanism"""
+    for attempt in range(max_retries):
+        try:
+            _LOGGER.info(f"Attempt {attempt + 1}: Initializing data bridge...")
+            
+            data_bridge = NiuDataBridge(sn, token)
+            
+            data_bridge.updateBat()
+            data_bridge.updateMoto()
+            data_bridge.updateMotoInfo()
+            data_bridge.updateTrackInfo()
+            
+            import time
+            time.sleep(1)
+            
+            if data_bridge._dataMotoInfo and "data" in data_bridge._dataMotoInfo:
+                available_fields = list(data_bridge._dataMotoInfo["data"].keys())
+                _LOGGER.info(f"Available motor info fields: {available_fields}")
+            else:
+                _LOGGER.warning("Motor info data not available after update")
+            
+            _LOGGER.info("Data bridge initialized successfully")
+            return data_bridge
+            
+        except Exception as e:
+            _LOGGER.warning(f"Attempt {attempt + 1}: Error initializing data bridge: {e}")
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(retry_delay)
+            else:
+                _LOGGER.error(f"Final attempt failed: {e}")
+                return None
+    
+    return None
+
+
+def _create_sensors_with_retry(data_bridge, sensors, sensor_prefix, sn, max_retries=2, retry_delay=1):
+    """Create sensors with retry mechanism"""
     devices = []
+    failed_sensors = []
+    
     for sensor in sensors:
-        sensor_config = SENSOR_TYPES[sensor]
-        devices.append(
-            NiuSensor(
-                data_bridge,
-                sensor,
-                sensor_config[0],
-                sensor_config[1],
-                sensor_config[2],
-                sensor_config[3],
-                sensor_prefix,
-                sensor_config[4],
-                sn,
-                sensor_config[5],
-            )
-        )
-    add_devices(devices)
+        sensor_created = False
+        
+        for attempt in range(max_retries):
+            try:
+                sensor_config = SENSOR_TYPES[sensor]
+                device = NiuSensor(
+                    data_bridge,
+                    sensor,
+                    sensor_config[0],
+                    sensor_config[1],
+                    sensor_config[2],
+                    sensor_config[3],
+                    sensor_prefix,
+                    sensor_config[4],
+                    sn,
+                    sensor_config[5],
+                )
+                devices.append(device)
+                sensor_created = True
+                break
+                
+            except Exception as e:
+                _LOGGER.warning(f"Attempt {attempt + 1}: Error creating sensor {sensor}: {e}")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(retry_delay)
+                else:
+                    _LOGGER.error(f"Failed to create sensor {sensor} after all attempts")
+                    failed_sensors.append(sensor)
+        
+        if not sensor_created:
+            _LOGGER.warning(f"Sensor {sensor} will be skipped due to creation failure")
+    
+    if failed_sensors:
+        _LOGGER.warning(f"Failed to create sensors: {', '.join(failed_sensors)}")
+    
+    return devices
 
 
 class NiuDataBridge(object):
     def __init__(self, sn, token):
-
         self._dataBat = None
         self._dataMoto = None
         self._dataMotoInfo = None
@@ -426,21 +542,37 @@ class NiuDataBridge(object):
         self._token = token
 
     def dataBat(self, id_field):
+        if not self._dataBat or "data" not in self._dataBat:
+            return None
         return self._dataBat["data"]["batteries"]["compartmentA"][id_field]
 
     def dataMoto(self, id_field):
+        if not self._dataMoto or "data" not in self._dataMoto:
+            return None
         return self._dataMoto["data"][id_field]
 
     def dataDist(self, id_field):
+        if not self._dataMoto or "data" not in self._dataMoto or "lastTrack" not in self._dataMoto["data"]:
+            return None
         return self._dataMoto["data"]["lastTrack"][id_field]
 
     def dataPos(self, id_field):
+        if not self._dataMoto or "data" not in self._dataMoto or "postion" not in self._dataMoto["data"]:
+            return None
         return self._dataMoto["data"]["postion"][id_field]
 
     def dataOverall(self, id_field):
+        if not self._dataMotoInfo or "data" not in self._dataMotoInfo:
+            return None
+        
+        if id_field not in self._dataMotoInfo["data"]:
+            return None
+            
         return self._dataMotoInfo["data"][id_field]
 
     def dataTrack(self, id_field):
+        if not self._dataTrackInfo or "data" not in self._dataTrackInfo or not self._dataTrackInfo["data"]:
+            return None
         if id_field == "startTime" or id_field == "endTime":
             return datetime.fromtimestamp(
                 (self._dataTrackInfo["data"][0][id_field]) / 1000
@@ -453,7 +585,6 @@ class NiuDataBridge(object):
             thumburl = self._dataTrackInfo["data"][0][id_field].replace(
                 "app-api.niucache.com", "app-api.niu.com"
             )
-            #return thumburl.replace("/track/thumb/", "/track/overseas/thumb/")
             return thumburl
         return self._dataTrackInfo["data"][0][id_field]
 
@@ -467,7 +598,13 @@ class NiuDataBridge(object):
 
     @Throttle(timedelta(seconds=1))
     def updateMotoInfo(self):
-        self._dataMotoInfo = post_info(MOTOINFO_ALL_API_URI, self._sn, self._token)
+        try:
+            result = post_info(MOTOINFO_ALL_API_URI, self._sn, self._token)
+            if result is False or result is None:
+                return
+            self._dataMotoInfo = result
+        except Exception as e:
+            _LOGGER.error(f"updateMotoInfo: Exception occurred: {e}")
 
     @Throttle(timedelta(seconds=1))
     def updateTrackInfo(self):
@@ -491,27 +628,89 @@ class NiuSensor(Entity):
         self._unique_id = "sensor.niu_scooter_" + sn + "_" + sensor_id
         self._name = (
             "NIU Scooter " + sensor_prefix + " " + name
-        )  # Scooter name as sensor prefix
+        )
         self._uom = uom
         self._data_bridge = data_bridge
         self._device_class = device_class
-        self._id_name = id_name  # info field for parsing the URL
-        self._sensor_grp = sensor_grp  # info field for choosing the right URL
+        self._id_name = id_name
+        self._sensor_grp = sensor_grp
         self._icon = icon
 
-        # first init
+        self._state = self._initialize_sensor_state()
+        
+    def _initialize_sensor_state(self, max_retries=3, retry_delay=2):
+        """Initialize sensor state with retry mechanism"""
+        for attempt in range(max_retries):
+            try:
+                if self._sensor_grp == SENSOR_TYPE_BAT:
+                    state = self._data_bridge.dataBat(self._id_name)
+                elif self._sensor_grp == SENSOR_TYPE_MOTO:
+                    state = self._data_bridge.dataMoto(self._id_name)
+                elif self._sensor_grp == SENSOR_TYPE_POS:
+                    state = self._data_bridge.dataPos(self._id_name)
+                elif self._sensor_grp == SENSOR_TYPE_DIST:
+                    state = self._data_bridge.dataDist(self._id_name)
+                elif self._sensor_grp == SENSOR_TYPE_OVERALL:
+                    state = self._data_bridge.dataOverall(self._id_name)
+                elif self._sensor_grp == SENSOR_TYPE_TRACK:
+                    state = self._data_bridge.dataTrack(self._id_name)
+                else:
+                    state = None
+                
+                if state is not None:
+                    return state
+                
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(retry_delay)
+                    self._try_update_data()
+                    
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    _LOGGER.warning(f"Attempt {attempt + 1}: Error initializing sensor {self._name}: {e}, retrying in {retry_delay}s...")
+                    import time
+                    time.sleep(retry_delay)
+                    self._try_update_data()
+                else:
+                    _LOGGER.error(f"Final attempt failed for sensor {self._name}: {e}")
+        
+        _LOGGER.warning(f"All initialization attempts failed for sensor {self._name}, using default value")
+        return self._get_default_state()
+    
+    def _try_update_data(self):
+        """Try to update data before retry"""
+        try:
+            if self._sensor_grp == SENSOR_TYPE_BAT:
+                self._data_bridge.updateBat()
+            elif self._sensor_grp == SENSOR_TYPE_MOTO:
+                self._data_bridge.updateMoto()
+            elif self._sensor_grp == SENSOR_TYPE_OVERALL:
+                self._data_bridge.updateMotoInfo()
+            elif self._sensor_grp == SENSOR_TYPE_TRACK:
+                self._data_bridge.updateTrackInfo()
+                
+            import time
+            time.sleep(0.5)
+            
+        except Exception as e:
+            _LOGGER.debug(f"Data update failed during retry for {self._name}: {e}")
+    
+    def _get_default_state(self):
+        """Get default state based on sensor type"""
         if self._sensor_grp == SENSOR_TYPE_BAT:
-            self._state = self._data_bridge.dataBat(self._id_name)
+            return 0
         elif self._sensor_grp == SENSOR_TYPE_MOTO:
-            self._state = self._data_bridge.dataMoto(self._id_name)
+            return 0
         elif self._sensor_grp == SENSOR_TYPE_POS:
-            self._state = self._data_bridge.dataPos(self._id_name)
+            return 0.0
         elif self._sensor_grp == SENSOR_TYPE_DIST:
-            self._state = self._data_bridge.dataDist(self._id_name)
+            return 0
         elif self._sensor_grp == SENSOR_TYPE_OVERALL:
-            self._state = self._data_bridge.dataOverall(self._id_name)
+            return 0
         elif self._sensor_grp == SENSOR_TYPE_TRACK:
-            self._state = self._data_bridge.dataTrack(self._id_name)
+            return "N/A"
+        else:
+            return 0
 
     @property
     def unique_id(self):
@@ -540,45 +739,172 @@ class NiuSensor(Entity):
     @property
     def extra_state_attributes(self):
         if self._sensor_grp == SENSOR_TYPE_MOTO and self._id_name == "isConnected":
-            return {
-                "bmsId": self._data_bridge.dataBat("bmsId"),
-                "latitude": self._data_bridge.dataPos("lat"),
-                "longitude": self._data_bridge.dataPos("lng"),
-                "gsm": self._data_bridge.dataMoto("gsm"),
-                "gps": self._data_bridge.dataMoto("gps"),
-                "time": self._data_bridge.dataDist("time"),
-                "range": self._data_bridge.dataMoto("estimatedMileage"),
-                "battery": self._data_bridge.dataBat("batteryCharging"),
-                "battery_grade": self._data_bridge.dataBat("gradeBattery"),
-                "centre_ctrl_batt": self._data_bridge.dataMoto("centreCtrlBattery"),
-            }
+            try:
+                return {
+                    "bmsId": self._data_bridge.dataBat("bmsId") or "N/A",
+                    "latitude": self._data_bridge.dataPos("lat") or 0.0,
+                    "longitude": self._data_bridge.dataPos("lng") or 0.0,
+                    "gsm": self._data_bridge.dataMoto("gsm") or "N/A",
+                    "gps": self._data_bridge.dataMoto("gps") or "N/A",
+                    "time": self._data_bridge.dataDist("time") or 0,
+                    "range": self._data_bridge.dataMoto("estimatedMileage") or 0,
+                    "battery": self._data_bridge.dataBat("batteryCharging") or 0,
+                    "battery_grade": self._data_bridge.dataBat("gradeBattery") or 0,
+                    "centre_ctrl_batt": self._data_bridge.dataMoto("centreCtrlBattery") or 0,
+                }
+            except Exception as e:
+                _LOGGER.warning(f"Error getting extra state attributes for {self._name}: {e}")
+                return {}
+        return {}
 
     def update(self):
-        if self._sensor_grp == SENSOR_TYPE_BAT:
-            self._data_bridge.updateBat()
-            self._state = self._data_bridge.dataBat(self._id_name)
-            # if not (
-            #     (self._id_name == "batteryCharging" or self._id_name == "temperature")
-            #     and self._data_bridge.dataBat("batteryCharging") == 0
-            # ):
-            #    self._state = self._data_bridge.dataBat(self._id_name)
-        elif self._sensor_grp == SENSOR_TYPE_MOTO:
-            self._data_bridge.updateMoto()
-            self._state = self._data_bridge.dataMoto(self._id_name)
-            # if not (
-            #     (self._id_name == "estimatedMileage" or self._id_name == "leftTime")
-            #     and self._data_bridge.dataMoto("estimatedMileage") == 0
-            # ):
-            #     self._state = self._data_bridge.dataMoto(self._id_name)
-        elif self._sensor_grp == SENSOR_TYPE_POS:
-            self._data_bridge.updateMoto()
-            self._state = self._data_bridge.dataPos(self._id_name)
-        elif self._sensor_grp == SENSOR_TYPE_DIST:
-            self._data_bridge.updateMoto()
-            self._state = self._data_bridge.dataDist(self._id_name)
-        elif self._sensor_grp == SENSOR_TYPE_OVERALL:
-            self._data_bridge.updateMotoInfo()
-            self._state = self._data_bridge.dataOverall(self._id_name)
-        elif self._sensor_grp == SENSOR_TYPE_TRACK:
-            self._data_bridge.updateTrackInfo()
-            self._state = self._data_bridge.dataTrack(self._id_name)
+        try:
+            new_state = None
+            
+            if self._sensor_grp == SENSOR_TYPE_BAT:
+                self._data_bridge.updateBat()
+                new_state = self._data_bridge.dataBat(self._id_name)
+            elif self._sensor_grp == SENSOR_TYPE_MOTO:
+                self._data_bridge.updateMoto()
+                new_state = self._data_bridge.dataMoto(self._id_name)
+            elif self._sensor_grp == SENSOR_TYPE_POS:
+                self._data_bridge.updateMoto()
+                new_state = self._data_bridge.dataPos(self._id_name)
+            elif self._sensor_grp == SENSOR_TYPE_DIST:
+                self._data_bridge.updateMoto()
+                new_state = self._data_bridge.dataDist(self._id_name)
+            elif self._sensor_grp == SENSOR_TYPE_OVERALL:
+                self._data_bridge.updateMotoInfo()
+                new_state = self._data_bridge.dataOverall(self._id_name)
+            elif self._sensor_grp == SENSOR_TYPE_TRACK:
+                self._data_bridge.updateTrackInfo()
+                new_state = self._data_bridge.dataTrack(self._id_name)
+            
+            if new_state is not None:
+                if self._is_valid_state(new_state):
+                    self._state = new_state
+                else:
+                    _LOGGER.debug(f"State validation failed for {self._name}: {new_state}, keeping current state")
+            else:
+                _LOGGER.debug(f"No valid data received for {self._name}, keeping current state")
+                
+        except Exception as e:
+            _LOGGER.warning(f"Error updating sensor {self._name}: {e}")
+    
+    def _is_valid_state(self, state):
+        """Validate if the new state value is reasonable"""
+        try:
+            if state is None:
+                return False
+            
+            if state == "":
+                if self._id_name in ["gradeBattery", "bmsId"]:
+                    return True
+                return False
+            
+            if self._sensor_grp == SENSOR_TYPE_BAT:
+                if isinstance(state, (int, float)):
+                    if self._id_name == "batteryCharging" and 0 <= state <= 100:
+                        return True
+                    elif self._id_name == "temperature" and -20 <= state <= 80:
+                        return True
+                    elif self._id_name == "gradeBattery" and 0 <= state <= 100:
+                        return True
+                    elif self._id_name in ["chargedTimes", "bmsId"]:
+                        return state >= 0
+                    else:
+                        return True
+                elif isinstance(state, str):
+                    if self._id_name == "temperatureDesc":
+                        valid_descriptions = ["normal", "high", "low", "warning", "error"]
+                        return state.lower() in valid_descriptions
+                    elif self._id_name == "gradeBattery":
+                        try:
+                            grade = float(state)
+                            return 0 <= grade <= 100
+                        except (ValueError, TypeError):
+                            return False
+                    elif self._id_name == "chargedTimes":
+                        try:
+                            charged_times = int(state)
+                            return charged_times >= 0
+                        except (ValueError, TypeError):
+                            return False
+                    else:
+                        return True
+                return False
+                
+            elif self._sensor_grp == SENSOR_TYPE_MOTO:
+                if isinstance(state, (int, float)):
+                    if self._id_name == "nowSpeed" and 0 <= state <= 100:
+                        return True
+                    elif self._id_name == "estimatedMileage" and 0 <= state <= 1000:
+                        return True
+                    elif self._id_name == "leftTime" and 0 <= state <= 24:
+                        return True
+                    elif self._id_name == "centreCtrlBattery" and 0 <= state <= 100:
+                        return True
+                    else:
+                        return True
+                elif isinstance(state, str):
+                    if self._id_name == "isConnected":
+                        return state.lower() in ["true", "false", "1", "0", "connected", "disconnected"]
+                    elif self._id_name == "isCharging":
+                        return state.lower() in ["true", "false", "1", "0", "charging", "not_charging"]
+                    elif self._id_name == "lockStatus":
+                        return True
+                    else:
+                        return True
+                return False
+                
+            elif self._sensor_grp == SENSOR_TYPE_POS:
+                if isinstance(state, (int, float)):
+                    if self._id_name in ["lat", "lng"]:
+                        return -180 <= state <= 180
+                    return True
+                elif isinstance(state, str):
+                    try:
+                        pos_value = float(state)
+                        if self._id_name in ["lat", "lng"]:
+                            return -180 <= pos_value <= 180
+                        return True
+                    except (ValueError, TypeError):
+                        return False
+                return False
+                
+            elif self._sensor_grp == SENSOR_TYPE_DIST:
+                if isinstance(state, (int, float)):
+                    return state >= 0
+                elif isinstance(state, str):
+                    try:
+                        dist_value = float(state)
+                        return dist_value >= 0
+                    except (ValueError, TypeError):
+                        return False
+                return False
+                
+            elif self._sensor_grp == SENSOR_TYPE_OVERALL:
+                if isinstance(state, (int, float)):
+                    return state >= 0
+                elif isinstance(state, str):
+                    try:
+                        overall_value = float(state)
+                        return overall_value >= 0
+                    except (ValueError, TypeError):
+                        return state != ""
+                return False
+                
+            elif self._sensor_grp == SENSOR_TYPE_TRACK:
+                if isinstance(state, str):
+                    return True
+                elif isinstance(state, (int, float)):
+                    if self._id_name in ["distance", "avespeed", "ridingtime"]:
+                        return state >= 0
+                    return True
+                return False
+            
+            return True
+            
+        except Exception as e:
+            _LOGGER.debug(f"Error validating state {state} for {self._name}: {e}")
+            return False
