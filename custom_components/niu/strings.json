@@ -24,9 +24,9 @@
       },
       "sensors": {
         "data": {
-          "monitored_variables": "要监控的传感器"
+          "monitored_variables": "要监控的传感器（用逗号分隔）"
         },
-        "description": "选择您要为NIU滑板车监控的传感器。",
+        "description": "输入要监控的传感器名称，用逗号分隔。例如：BatteryCharge,CurrentSpeed,Temperature",
         "title": "选择传感器"
       },
       "reconfigure": {
