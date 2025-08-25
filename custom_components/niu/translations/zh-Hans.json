@@ -8,7 +8,9 @@
     "error": {
       "cannot_connect": "无法连接到NIU API",
       "invalid_auth": "认证凭据无效",
-      "unknown": "发生意外错误"
+      "unknown": "发生意外错误",
+      "no_sensors_selected": "请至少选择一个传感器",
+      "invalid_sensors": "选择的传感器无效"
     },
     "step": {
       "user": {

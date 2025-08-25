@@ -43,11 +43,7 @@ STEP_SENSORS_DATA_SCHEMA = vol.Schema(
         vol.Optional(
             CONF_MONITORED_VARIABLES,
             default=DEFAULT_MONITORED_VARIABLES,
-        ): vol.All(
-            cv.ensure_list,
-            vol.Length(min=1),
-            [vol.In(AVAILABLE_SENSORS)],
-        ),
+        ): list,
     }
 )
 
@@ -132,22 +128,32 @@ class NiuConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Create unique ID based on scooter SN
-            unique_id = f"niu_scooter_{self._input_data['sn_id']}"
-            await self.async_set_unique_id(unique_id)
-            self._abort_if_unique_id_configured()
+            # Validate sensor selection
+            monitored_variables = user_input.get(CONF_MONITORED_VARIABLES, [])
+            if not monitored_variables:
+                errors["base"] = "no_sensors_selected"
+            else:
+                # Check if all selected sensors are valid
+                invalid_sensors = [s for s in monitored_variables if s not in AVAILABLE_SENSORS]
+                if invalid_sensors:
+                    errors["base"] = "invalid_sensors"
+                else:
+                    # Create unique ID based on scooter SN
+                    unique_id = f"niu_scooter_{self._input_data['sn_id']}"
+                    await self.async_set_unique_id(unique_id)
+                    self._abort_if_unique_id_configured()
 
-            # Create the config entry
-            config_data = {
-                CONF_USERNAME: self._input_data[CONF_USERNAME],
-                CONF_PASSWORD: self._input_data[CONF_PASSWORD],
-                CONF_SCOOTER_ID: self._input_data[CONF_SCOOTER_ID],
-                CONF_MONITORED_VARIABLES: user_input[CONF_MONITORED_VARIABLES],
-            }
+                    # Create the config entry
+                    config_data = {
+                        CONF_USERNAME: self._input_data[CONF_USERNAME],
+                        CONF_PASSWORD: self._input_data[CONF_PASSWORD],
+                        CONF_SCOOTER_ID: self._input_data[CONF_SCOOTER_ID],
+                        CONF_MONITORED_VARIABLES: monitored_variables,
+                    }
 
-            return self.async_create_entry(
-                title=self._input_data["title"], data=config_data
-            )
+                    return self.async_create_entry(
+                        title=self._input_data["title"], data=config_data
+                    )
 
         return self.async_show_form(
             step_id="sensors", data_schema=STEP_SENSORS_DATA_SCHEMA, errors=errors
@@ -208,8 +214,20 @@ class NiuOptionsFlowHandler(OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         """Handle options flow."""
+        errors: dict[str, str] = {}
+        
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            # Validate sensor selection
+            monitored_variables = user_input.get(CONF_MONITORED_VARIABLES, [])
+            if not monitored_variables:
+                errors["base"] = "no_sensors_selected"
+            else:
+                # Check if all selected sensors are valid
+                invalid_sensors = [s for s in monitored_variables if s not in AVAILABLE_SENSORS]
+                if invalid_sensors:
+                    errors["base"] = "invalid_sensors"
+                else:
+                    return self.async_create_entry(title="", data=user_input)
 
         data_schema = vol.Schema(
             {
@@ -218,15 +236,11 @@ class NiuOptionsFlowHandler(OptionsFlow):
                     default=self.config_entry.data.get(
                         CONF_MONITORED_VARIABLES, DEFAULT_MONITORED_VARIABLES
                     ),
-                ): vol.All(
-                    cv.ensure_list,
-                    vol.Length(min=1),
-                    [vol.In(AVAILABLE_SENSORS)],
-                ),
+                ): list,
             }
         )
 
-        return self.async_show_form(step_id="init", data_schema=data_schema)
+        return self.async_show_form(step_id="init", data_schema=data_schema, errors=errors)
 
 
 class CannotConnect(HomeAssistantError):
