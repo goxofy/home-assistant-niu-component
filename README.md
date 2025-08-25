@@ -159,8 +159,8 @@ sensor:
 
 ## 支持
 
-- **问题反馈**: [GitHub Issues](https://github.com/marcelwestrahome/home-assistant-niu-component/issues)
-- **文档**: [GitHub 仓库](https://github.com/marcelwestrahome/home-assistant-niu-component)
+- **问题反馈**: [GitHub Issues](https://github.com/goxofy/home-assistant-niu-component/issues)
+- **文档**: [GitHub 仓库](https://github.com/goxofy/home-assistant-niu-component)
 
 ## 更新日志
 

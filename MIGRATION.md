@@ -103,7 +103,7 @@
 
 如果您在迁移过程中遇到问题：
 
-1. 查看[GitHub Issues](https://github.com/marcelwestrahome/home-assistant-niu-component/issues)
+1. 查看[GitHub Issues](https://github.com/goxofy/home-assistant-niu-component/issues)
 2. 查找类似的迁移问题
 3. 创建新问题并详细描述您的问题
 
