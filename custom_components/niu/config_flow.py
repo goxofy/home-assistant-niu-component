@@ -43,7 +43,7 @@ STEP_SENSORS_DATA_SCHEMA = vol.Schema(
             CONF_MONITORED_VARIABLES,
             default=DEFAULT_MONITORED_VARIABLES,
         ): vol.All(
-            vol.List(vol.In(AVAILABLE_SENSORS)),
+            [vol.In(AVAILABLE_SENSORS)],
             vol.Length(min=1),
         ),
     }
@@ -217,7 +217,7 @@ class NiuOptionsFlowHandler(OptionsFlow):
                         CONF_MONITORED_VARIABLES, DEFAULT_MONITORED_VARIABLES
                     ),
                 ): vol.All(
-                    vol.List(vol.In(AVAILABLE_SENSORS)),
+                    [vol.In(AVAILABLE_SENSORS)],
                     vol.Length(min=1),
                 ),
             }
