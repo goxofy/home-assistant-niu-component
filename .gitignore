@@ -5,3 +5,10 @@ __pycache__/
 
 .idea/
 venv/
+
+integration_demo/
+UPGRADE_SUMMARY.md
+DOCUMENTATION_CN.md
+
+
+.DS_Store

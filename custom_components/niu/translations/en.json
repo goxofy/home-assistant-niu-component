@@ -1,0 +1,51 @@
+{
+  "config": {
+    "title": "NIU Scooter Integration",
+    "abort": {
+      "already_configured": "Device is already configured",
+      "reconfigure_successful": "Reconfiguration successful"
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to NIU API",
+      "invalid_auth": "Invalid authentication credentials",
+      "unknown": "Unexpected error occurred"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "username": "Username/Email",
+          "password": "Password",
+          "scooter_id": "Scooter ID"
+        },
+        "description": "Enter your NIU account credentials and select the scooter to monitor.",
+        "title": "NIU Account"
+      },
+      "sensors": {
+        "data": {
+          "monitored_variables": "Sensors to monitor"
+        },
+        "description": "Select which sensors you want to monitor for your NIU scooter.",
+        "title": "Select Sensors"
+      },
+      "reconfigure": {
+        "data": {
+          "username": "Username/Email",
+          "password": "Password"
+        },
+        "description": "Reconfigure your NIU account credentials.",
+        "title": "Reconfigure NIU Account"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "monitored_variables": "Sensors to monitor"
+        },
+        "description": "Select which sensors you want to monitor for your NIU scooter.",
+        "title": "NIU Integration Options"
+      }
+    }
+  }
+}

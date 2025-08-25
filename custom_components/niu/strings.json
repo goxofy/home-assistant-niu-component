@@ -1,0 +1,51 @@
+{
+  "config": {
+    "title": "NIU 滑板车集成",
+    "abort": {
+      "already_configured": "设备已配置",
+      "reconfigure_successful": "重新配置成功"
+    },
+    "error": {
+      "cannot_connect": "无法连接到NIU API",
+      "invalid_auth": "认证凭据无效",
+      "unknown": "发生意外错误"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "username": "用户名/邮箱",
+          "password": "密码",
+          "scooter_id": "滑板车ID"
+        },
+        "description": "输入您的NIU账户凭据并选择要监控的滑板车。",
+        "title": "NIU账户"
+      },
+      "sensors": {
+        "data": {
+          "monitored_variables": "要监控的传感器"
+        },
+        "description": "选择您要为NIU滑板车监控的传感器。",
+        "title": "选择传感器"
+      },
+      "reconfigure": {
+        "data": {
+          "username": "用户名/邮箱",
+          "password": "密码"
+        },
+        "description": "重新配置您的NIU账户凭据。",
+        "title": "重新配置NIU账户"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "monitored_variables": "要监控的传感器"
+        },
+        "description": "选择您要为NIU滑板车监控的传感器。",
+        "title": "NIU集成选项"
+      }
+    }
+  }
+}
