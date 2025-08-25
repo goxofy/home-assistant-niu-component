@@ -16,6 +16,7 @@ from homeassistant.config_entries import (
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONF_MONITORED_VARIABLES,
@@ -43,8 +44,9 @@ STEP_SENSORS_DATA_SCHEMA = vol.Schema(
             CONF_MONITORED_VARIABLES,
             default=DEFAULT_MONITORED_VARIABLES,
         ): vol.All(
-            [vol.In(AVAILABLE_SENSORS)],
+            cv.ensure_list,
             vol.Length(min=1),
+            [vol.In(AVAILABLE_SENSORS)],
         ),
     }
 )
@@ -217,8 +219,9 @@ class NiuOptionsFlowHandler(OptionsFlow):
                         CONF_MONITORED_VARIABLES, DEFAULT_MONITORED_VARIABLES
                     ),
                 ): vol.All(
-                    [vol.In(AVAILABLE_SENSORS)],
+                    cv.ensure_list,
                     vol.Length(min=1),
+                    [vol.In(AVAILABLE_SENSORS)],
                 ),
             }
         )
