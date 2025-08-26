@@ -290,7 +290,7 @@ async def async_setup_entry(
     entities = []
     for sensor in monitored_variables:
         if sensor in SENSOR_TYPES:
-                sensor_config = SENSOR_TYPES[sensor]
+            sensor_config = SENSOR_TYPES[sensor]
             entities.append(
                 NiuSensor(
                     coordinator,
