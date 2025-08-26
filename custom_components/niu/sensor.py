@@ -290,7 +290,7 @@ async def async_setup_entry(
     entities = []
     for sensor in monitored_variables:
         if sensor in SENSOR_TYPES:
-            sensor_config = SENSOR_TYPES[sensor]
+                sensor_config = SENSOR_TYPES[sensor]
             entities.append(
                 NiuSensor(
                     coordinator,
@@ -337,14 +337,17 @@ class NiuSensor(SensorEntity):
         self._state_class = state_class
         self._config_entry = config_entry
         
-        # Create unique ID
-        self._attr_unique_id = f"niu_scooter_{coordinator.sn}_{sensor_id}"
-        self._attr_name = f"NIU Scooter {sensor_name}"
+        # Get scooter ID from config
+        scooter_id = config_entry.data.get(CONF_SCOOTER_ID, 0)
         
-        # Set device info
+        # Create unique ID with scooter ID
+        self._attr_unique_id = f"niu_scooter_{scooter_id}_{sensor_id}"
+        self._attr_name = f"NIU Scooter {scooter_id} {sensor_name}"
+        
+        # Set device info with scooter ID
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"niu_scooter_{coordinator.sn}")},
-            name=f"NIU Scooter",
+            identifiers={(DOMAIN, f"niu_scooter_{scooter_id}_{coordinator.sn}")},
+            name=f"NIU Scooter {scooter_id}",
             manufacturer="NIU",
             model="Electric Scooter",
             configuration_url="https://account.niu.com",

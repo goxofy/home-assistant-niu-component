@@ -9,6 +9,7 @@ venv/
 integration_demo/
 UPGRADE_SUMMARY.md
 DOCUMENTATION_CN.md
+IMPROVEMENTS_SUMMARY.md
 
 
 .DS_Store

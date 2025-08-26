@@ -17,6 +17,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers import selector
 
 from .const import (
     CONF_MONITORED_VARIABLES,
@@ -42,8 +43,14 @@ STEP_SENSORS_DATA_SCHEMA = vol.Schema(
     {
         vol.Optional(
             CONF_MONITORED_VARIABLES,
-            default=",".join(DEFAULT_MONITORED_VARIABLES),
-        ): str,
+            default=DEFAULT_MONITORED_VARIABLES,
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=AVAILABLE_SENSORS,
+                multiple=True,
+                mode=selector.SelectSelectorMode.DROPDOWN
+            )
+        ),
     }
 )
 
@@ -129,36 +136,31 @@ class NiuConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             # Validate sensor selection
-            monitored_variables_str = user_input.get(CONF_MONITORED_VARIABLES, "")
-            if not monitored_variables_str:
+            monitored_variables = user_input.get(CONF_MONITORED_VARIABLES, [])
+            if not monitored_variables:
                 errors["base"] = "no_sensors_selected"
             else:
-                # Convert string to list
-                monitored_variables = [s.strip() for s in monitored_variables_str.split(",") if s.strip()]
-                if not monitored_variables:
-                    errors["base"] = "no_sensors_selected"
+                # Check if all selected sensors are valid
+                invalid_sensors = [s for s in monitored_variables if s not in AVAILABLE_SENSORS]
+                if invalid_sensors:
+                    errors["base"] = "invalid_sensors"
                 else:
-                    # Check if all selected sensors are valid
-                    invalid_sensors = [s for s in monitored_variables if s not in AVAILABLE_SENSORS]
-                    if invalid_sensors:
-                        errors["base"] = "invalid_sensors"
-                    else:
-                        # Create unique ID based on scooter SN
-                        unique_id = f"niu_scooter_{self._input_data['sn_id']}"
-                        await self.async_set_unique_id(unique_id)
-                        self._abort_if_unique_id_configured()
+                    # Create unique ID based on scooter SN
+                    unique_id = f"niu_scooter_{self._input_data['sn_id']}"
+                    await self.async_set_unique_id(unique_id)
+                    self._abort_if_unique_id_configured()
 
-                        # Create the config entry
-                        config_data = {
-                            CONF_USERNAME: self._input_data[CONF_USERNAME],
-                            CONF_PASSWORD: self._input_data[CONF_PASSWORD],
-                            CONF_SCOOTER_ID: self._input_data[CONF_SCOOTER_ID],
-                            CONF_MONITORED_VARIABLES: monitored_variables,
-                        }
+                    # Create the config entry
+                    config_data = {
+                        CONF_USERNAME: self._input_data[CONF_USERNAME],
+                        CONF_PASSWORD: self._input_data[CONF_PASSWORD],
+                        CONF_SCOOTER_ID: self._input_data[CONF_SCOOTER_ID],
+                        CONF_MONITORED_VARIABLES: monitored_variables,
+                    }
 
-                        return self.async_create_entry(
-                            title=self._input_data["title"], data=config_data
-                        )
+                    return self.async_create_entry(
+                        title=self._input_data["title"], data=config_data
+                    )
 
         return self.async_show_form(
             step_id="sensors", data_schema=STEP_SENSORS_DATA_SCHEMA, errors=errors
@@ -213,31 +215,26 @@ class NiuConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             # Validate sensor selection
-            monitored_variables_str = user_input.get(CONF_MONITORED_VARIABLES, "")
-            if not monitored_variables_str:
+            monitored_variables = user_input.get(CONF_MONITORED_VARIABLES, [])
+            if not monitored_variables:
                 errors["base"] = "no_sensors_selected"
             else:
-                # Convert string to list
-                monitored_variables = [s.strip() for s in monitored_variables_str.split(",") if s.strip()]
-                if not monitored_variables:
-                    errors["base"] = "no_sensors_selected"
+                # Check if all selected sensors are valid
+                invalid_sensors = [s for s in monitored_variables if s not in AVAILABLE_SENSORS]
+                if invalid_sensors:
+                    errors["base"] = "invalid_sensors"
                 else:
-                    # Check if all selected sensors are valid
-                    invalid_sensors = [s for s in monitored_variables if s not in AVAILABLE_SENSORS]
-                    if invalid_sensors:
-                        errors["base"] = "invalid_sensors"
-                    else:
-                        return self.async_update_reload_and_abort(
-                            config_entry,
-                            unique_id=config_entry.unique_id,
-                            data={
-                                **config_entry.data,
-                                CONF_USERNAME: self._input_data[CONF_USERNAME],
-                                CONF_PASSWORD: self._input_data[CONF_PASSWORD],
-                                CONF_MONITORED_VARIABLES: monitored_variables,
-                            },
-                            reason="reconfigure_successful",
-                        )
+                    return self.async_update_reload_and_abort(
+                        config_entry,
+                        unique_id=config_entry.unique_id,
+                        data={
+                            **config_entry.data,
+                            CONF_USERNAME: self._input_data[CONF_USERNAME],
+                            CONF_PASSWORD: self._input_data[CONF_PASSWORD],
+                            CONF_MONITORED_VARIABLES: monitored_variables,
+                        },
+                        reason="reconfigure_successful",
+                    )
 
         return self.async_show_form(
             step_id="reconfigure_sensors",
@@ -245,10 +242,16 @@ class NiuConfigFlow(ConfigFlow, domain=DOMAIN):
                 {
                     vol.Optional(
                         CONF_MONITORED_VARIABLES,
-                        default=",".join(config_entry.data.get(
+                        default=config_entry.data.get(
                             CONF_MONITORED_VARIABLES, DEFAULT_MONITORED_VARIABLES
-                        )),
-                    ): str,
+                        ),
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=AVAILABLE_SENSORS,
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.DROPDOWN
+                        )
+                    ),
                 }
             ),
             errors=errors,
@@ -269,32 +272,33 @@ class NiuOptionsFlowHandler(OptionsFlow):
         
         if user_input is not None:
             # Validate sensor selection
-            monitored_variables_str = user_input.get(CONF_MONITORED_VARIABLES, "")
-            if not monitored_variables_str:
+            monitored_variables = user_input.get(CONF_MONITORED_VARIABLES, [])
+            if not monitored_variables:
                 errors["base"] = "no_sensors_selected"
             else:
-                # Convert string to list
-                monitored_variables = [s.strip() for s in monitored_variables_str.split(",") if s.strip()]
-                if not monitored_variables:
-                    errors["base"] = "no_sensors_selected"
+                # Check if all selected sensors are valid
+                invalid_sensors = [s for s in monitored_variables if s not in AVAILABLE_SENSORS]
+                if invalid_sensors:
+                    errors["base"] = "invalid_sensors"
                 else:
-                    # Check if all selected sensors are valid
-                    invalid_sensors = [s for s in monitored_variables if s not in AVAILABLE_SENSORS]
-                    if invalid_sensors:
-                        errors["base"] = "invalid_sensors"
-                    else:
-                        # Store as list
-                        user_input[CONF_MONITORED_VARIABLES] = monitored_variables
-                        return self.async_create_entry(title="", data=user_input)
+                    # Store as list
+                    user_input[CONF_MONITORED_VARIABLES] = monitored_variables
+                    return self.async_create_entry(title="", data=user_input)
 
         data_schema = vol.Schema(
             {
                 vol.Optional(
                     CONF_MONITORED_VARIABLES,
-                    default=",".join(self.config_entry.data.get(
+                    default=self.config_entry.data.get(
                         CONF_MONITORED_VARIABLES, DEFAULT_MONITORED_VARIABLES
-                    )),
-                ): str,
+                    ),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=AVAILABLE_SENSORS,
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.DROPDOWN
+                    )
+                ),
             }
         )
 

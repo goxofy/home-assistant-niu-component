@@ -24,9 +24,9 @@
       },
       "sensors": {
         "data": {
-          "monitored_variables": "要监控的传感器（用逗号分隔）"
+          "monitored_variables": "要监控的传感器"
         },
-        "description": "输入要监控的传感器名称，用逗号分隔。例如：BatteryCharge,CurrentSpeed,Temperature",
+        "description": "从下面的列表中选择您要监控的传感器。",
         "title": "选择传感器"
       },
       "reconfigure": {
@@ -36,6 +36,13 @@
         },
         "description": "重新配置您的NIU账户凭据。",
         "title": "重新配置NIU账户"
+      },
+      "reconfigure_sensors": {
+        "data": {
+          "monitored_variables": "要监控的传感器"
+        },
+        "description": "从下面的列表中选择您要监控的传感器。",
+        "title": "重新选择传感器"
       }
     }
   },
