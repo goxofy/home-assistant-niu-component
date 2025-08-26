@@ -47,7 +47,7 @@ SENSOR_TYPES = {
         "is_connected",
         "",
         "isConnected",
-        SENSOR_TYPE_BAT,
+        SENSOR_TYPE_MOTO,
         None,
         "mdi:connection",
         None,
