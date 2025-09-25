@@ -16,7 +16,9 @@
 
 1. 在HACS中添加此仓库：
    - 进入HACS → 集成
-   - 点击"+"按钮
+   - 点击右上角"..."选择"Custom repositories"
+   - 在Repository输入"https://github.com/goxofy/home-assistant-niu-component",Type选择"Intergration"
+   - 点击"ADD"按钮
    - 搜索"NIU Scooter Integration"
    - 点击"下载"
 
@@ -37,8 +39,6 @@
 
 ## 配置
 
-### UI配置（推荐）
-
 1. 进入设置 → 设备与服务 → 集成
 2. 点击"+"按钮并搜索"NIU Scooter Integration"
 3. 输入您的NIU账户凭据：
@@ -47,47 +47,6 @@
    - **滑板车ID**: 要监控的滑板车ID（默认：0）
 4. 选择要监控的传感器
 5. 点击"提交"
-
-### 旧版YAML配置（已弃用）
-
-如果您正在从旧版本升级，可以临时使用YAML配置：
-
-```yaml
-# configuration.yaml
-
-sensor:
-  - platform: niu
-    username: user@example.com
-    password: mysecretpassword
-    scooter_id: 0
-    monitored_variables:
-      - BatteryCharge          # 电池
-      - Isconnected            # 电池
-      - TimesCharged           # 电池
-      - temperatureDesc        # 电池
-      - Temperature            # 电池
-      - BatteryGrade           # 电池
-      - CurrentSpeed           # 电机
-      - ScooterConnected       # 电机（包含经纬度属性，可用于地图显示）
-      - IsCharging             # 电机
-      - IsLocked               # 电机
-      - TimeLeft               # 电机
-      - EstimatedMileage       # 电机
-      - centreCtrlBatt         # 电机
-      - HDOP                   # 电机
-      - Longitude              # 电机
-      - Latitude               # 电机
-      - totalMileage           # 总体
-      - DaysInUse              # 总体
-      - Distance               # 距离
-      - RidingTime             # 距离
-      - LastTrackStartTime     # 最后行程
-      - LastTrackEndTime       # 最后行程
-      - LastTrackDistance      # 最后行程
-      - LastTrackAverageSpeed  # 最后行程
-      - LastTrackRidingtime    # 最后行程
-      - LastTrackThumb         # 最后行程
-```
 
 ## 可用传感器
 
