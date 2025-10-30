@@ -31,6 +31,12 @@ from .const import (
 )
 from .coordinator import NiuDataCoordinator
 
+import math
+
+PI = 3.1415926535897932384626  # 圆周率
+ee = 0.00669342162296594323  # 偏心率平方
+a = 6378245.0  # 长半轴
+
 _LOGGER = logging.getLogger(__name__)
 
 SENSOR_TYPES = {
@@ -385,11 +391,14 @@ class NiuSensor(SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return entity specific state attributes."""
         if self._sensor_type == SENSOR_TYPE_MOTO and self._id_name == "isConnected":
+            lng = self.coordinator.get_position_data("lng") or 0.0,
+            lat = self.coordinator.get_position_data("lat") or 0.0,
+            _lng, _lat = gcj02_to_wgs84(lng, lat)
             try:
                 return {
                     "bmsId": self.coordinator.get_battery_data("bmsId") or "N/A",
-                    "latitude": self.coordinator.get_position_data("lat") or 0.0,
-                    "longitude": self.coordinator.get_position_data("lng") or 0.0,
+                    "latitude": _lat,
+                    "longitude": _lng,
                     "gsm": self.coordinator.get_motor_data("gsm") or "N/A",
                     "gps": self.coordinator.get_motor_data("gps") or "N/A",
                     "time": self.coordinator.get_distance_data("time") or 0,
@@ -414,3 +423,46 @@ class NiuSensor(SensorEntity):
         self.async_on_remove(
             self.coordinator.async_add_listener(self.async_write_ha_state)
         )
+
+
+def gcj02_to_wgs84(lng, lat):
+    lat = float(lat)
+    lng = float(lng)
+
+    if out_of_china(lng, lat):
+        return [lng, lat]
+    else:
+        dlat = transformlat(lng - 105.0, lat - 35.0)
+        dlng = transformlng(lng - 105.0, lat - 35.0)
+        radlat = lat / 180.0 * PI
+        magic = math.sin(radlat)
+        magic = 1 - ee * magic * magic
+        sqrtmagic = math.sqrt(magic)
+        dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic * sqrtmagic) * PI)
+        dlng = (dlng * 180.0) / (a / sqrtmagic * math.cos(radlat) * PI)
+        mglat = lat + dlat
+        mglng = lng + dlng
+        return lng * 2 - mglng, lat * 2 - mglat
+
+def out_of_china(lng, lat):
+    lat = float(lat)
+    lng = float(lng)
+    return not (lng > 73.66 and lng < 135.05 and lat > 3.86 and lat < 53.55)
+
+def transformlat(lng, lat):
+    lat = float(lat)
+    lng = float(lng)
+    ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * math.sqrt(abs(lng))
+    ret += (20.0 * math.sin(6.0 * lng * PI) + 20.0 * math.sin(2.0 * lng * PI)) * 2.0 / 3.0
+    ret += (20.0 * math.sin(lat * PI) + 40.0 * math.sin(lat / 3.0 * PI)) * 2.0 / 3.0
+    ret += (160.0 * math.sin(lat / 12.0 * PI) + 320 * math.sin(lat * PI / 30.0)) * 2.0 / 3.0
+    return ret
+
+def transformlng(lng, lat):
+    lat = float(lat)
+    lng = float(lng)
+    ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * math.sqrt(abs(lng))
+    ret += (20.0 * math.sin(6.0 * lng * PI) + 20.0 * math.sin(2.0 * lng * PI)) * 2.0 / 3.0
+    ret += (20.0 * math.sin(lng * PI) + 40.0 * math.sin(lng / 3.0 * PI)) * 2.0 / 3.0
+    ret += (150.0 * math.sin(lng / 12.0 * PI) + 300.0 * math.sin(lng / 30.0 * PI)) * 2.0 / 3.0
+    return ret
