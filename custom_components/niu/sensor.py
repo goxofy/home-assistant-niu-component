@@ -391,8 +391,8 @@ class NiuSensor(SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return entity specific state attributes."""
         if self._sensor_type == SENSOR_TYPE_MOTO and self._id_name == "isConnected":
-            lng = self.coordinator.get_position_data("lng") or 0.0,
-            lat = self.coordinator.get_position_data("lat") or 0.0,
+            lng = self.coordinator.get_position_data("lng") or 0.0
+            lat = self.coordinator.get_position_data("lat") or 0.0
             _lng, _lat = gcj02_to_wgs84(lng, lat)
             try:
                 return {
