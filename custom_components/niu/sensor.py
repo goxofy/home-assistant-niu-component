@@ -384,8 +384,27 @@ class NiuSensor(SensorEntity):
         """Return the state of the sensor."""
         if self.coordinator.data is None:
             return None
-            
-        return self.coordinator.get_data_by_type(self._sensor_type, self._id_name)
+
+        raw_value = self.coordinator.get_data_by_type(self._sensor_type, self._id_name)
+
+        if self._sensor_type == SENSOR_TYPE_POS:
+            if self._id_name == "lng":
+                lng = float(raw_value) if raw_value is not None else 0.0
+                lat = float(self.coordinator.get_position_data("lat")) if self.coordinator.get_position_data("lat") is not None else 0.0
+                if lng != 0.0 and lat != 0.0:
+                    wgs84_lng, wgs84_lat = gcj02_to_wgs84(lng, lat)
+                    return wgs84_lng
+                else:
+                    _LOGGER.warning("Skipping conversion due to zero coordinates")
+            elif self._id_name == "lat":
+                lng = float(self.coordinator.get_position_data("lng")) if self.coordinator.get_position_data("lng") is not None else 0.0
+                lat = float(raw_value) if raw_value is not None else 0.0
+                if lng != 0.0 and lat != 0.0:
+                    wgs84_lng, wgs84_lat = gcj02_to_wgs84(lng, lat)
+                    return wgs84_lat
+                else:
+                    _LOGGER.warning("Skipping conversion due to zero coordinates")
+        return raw_value
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
